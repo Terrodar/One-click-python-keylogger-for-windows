@@ -37,8 +37,10 @@ def OnKeyboardEvent(event):
 			print('se envia la senal!')
 			e.set()
 			
-	#put the keystroke in the mainlist
-	mainList.append(filter(event.Ascii))
+	#put the filtered keystroke in the mainlist
+	key = filter(event.Ascii)
+	if key !=0:
+		mainList.append(key)
 	#print (mainList)
 	
 	return True
